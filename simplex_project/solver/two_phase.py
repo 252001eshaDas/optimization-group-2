@@ -1,0 +1,341 @@
+import numpy as np
+
+class TwoPhase:
+
+    def __init__(self, problem):
+
+        self.problem = problem
+
+        # Convert MAX → MIN internally
+        if self.problem["type"] == "max":
+            for k in self.problem["objective"]["coefficients"]:
+                self.problem["objective"]["coefficients"][k] *= -1
+
+        self.standard = None
+        self.phase1_F = None
+        self.table = None
+        self.columns = None
+
+    # --------------------------------------------------
+    # Pretty Print Tableau
+    # --------------------------------------------------
+    def print_tableau(self, title="Tableau"):
+
+        print("" + "="*70)
+        print(title)
+        print("="*70)
+
+        header = self.columns + ["RHS"]
+        print("{:>8}".format(""), end="")
+        for h in header:
+            print("{:>10}".format(h), end="")
+        print()
+
+        for i, row in enumerate(self.table):
+
+            if i < len(self.table)-2:
+                label = f"Eq{i+1}"
+            elif i == len(self.table)-2:
+                label = "f-row"
+            else:
+                label = "F-row"
+
+            print("{:>8}".format(label), end="")
+            for val in row:
+                print("{:>10.4f}".format(val), end="")
+            print()
+
+    # --------------------------------------------------
+    # Convert to Standard Form
+    # --------------------------------------------------
+    def convert_to_standard_form(self):
+
+        problem = self.problem
+
+        self.standard = {
+            "variables": {
+                "decision": [],
+                "slack": [],
+                "surplus": [],
+                "artificial": []
+            },
+            "equations": []
+        }
+
+        decision = list(problem["objective"]["coefficients"].keys())
+        self.standard["variables"]["decision"] = decision[:]
+
+        s_count = 0
+        a_count = 0
+
+        for c in problem["constraints"]:
+
+            eq = {"coefficients": {}, "rhs": c["rhs"]}
+
+            for v in decision:
+                eq["coefficients"][v] = c["lhs"].get(v, 0)
+
+            if c["relation"] == "<=":
+                s_count += 1
+                s = f"S{s_count}"
+                eq["coefficients"][s] = 1
+                self.standard["variables"]["slack"].append(s)
+
+            elif c["relation"] == ">=":
+                s_count += 1
+                a_count += 1
+
+                s = f"S{s_count}"
+                a = f"A{a_count}"
+
+                eq["coefficients"][s] = -1
+                eq["coefficients"][a] = 1
+
+                self.standard["variables"]["surplus"].append(s)
+                self.standard["variables"]["artificial"].append(a)
+
+            elif c["relation"] == "=":
+                a_count += 1
+                a = f"A{a_count}"
+                eq["coefficients"][a] = 1
+                self.standard["variables"]["artificial"].append(a)
+
+            self.standard["equations"].append(eq)
+
+    # --------------------------------------------------
+    # Build Phase-I Objective
+    # --------------------------------------------------
+    def build_phase1_objective(self):
+
+        artificial = self.standard["variables"]["artificial"]
+        eqs = self.standard["equations"]
+
+        F = {"coefficients": {}, "constant": 0}
+
+        for eq in eqs:
+            for v in eq["coefficients"]:
+                F["coefficients"].setdefault(v, 0)
+
+        for a in artificial:
+            eq = next(e for e in eqs if a in e["coefficients"])
+            coeff = eq["coefficients"][a]
+
+            F["constant"] += eq["rhs"] / coeff
+
+            for v, c in eq["coefficients"].items():
+                if v != a:
+                    F["coefficients"][v] -= c / coeff
+
+        for a in artificial:
+            F["coefficients"].pop(a, None)
+
+        self.phase1_F = F
+
+    # --------------------------------------------------
+    # Build Initial Tableau
+    # --------------------------------------------------
+    def build_phase1_table(self):
+
+        vars_ = self.standard["variables"]
+
+        self.columns = (
+            vars_["decision"]
+            + vars_["slack"]
+            + vars_["surplus"]
+            + vars_["artificial"]
+        )
+
+        self.table = []
+
+        for eq in self.standard["equations"]:
+            row = [eq["coefficients"].get(v, 0) for v in self.columns]
+            row.append(eq["rhs"])
+            self.table.append(row)
+
+        obj = self.problem["objective"]["coefficients"]
+        f_row = [-obj.get(v, 0) for v in self.columns]
+        f_row.append(0)
+        self.table.append(f_row)
+
+        F_row = [-self.phase1_F["coefficients"].get(v, 0) for v in self.columns]
+        F_row.append(self.phase1_F["constant"])
+        self.table.append(F_row)
+
+    # --------------------------------------------------
+    # Bland’s Rule Pivot Selection
+    # --------------------------------------------------
+    def find_pivot(self, phase1=True):
+
+        last_row = len(self.table)-1
+        row = self.table[last_row][:-1]
+
+        pivot_col = None
+        for j, val in enumerate(row):
+            if val > 1e-9:
+                pivot_col = j
+                break
+
+        if pivot_col is None:
+            return None
+
+        ratios = []
+        for i in range(len(self.table)-(2 if phase1 else 1)):
+            val = self.table[i][pivot_col]
+            if val > 1e-9:
+                ratios.append((self.table[i][-1]/val, i))
+
+        if not ratios:
+            raise Exception("❌ Problem is UNBOUNDED")
+
+        _, pivot_row = min(ratios)
+        return pivot_row, pivot_col
+
+    # --------------------------------------------------
+    # Pivot Operation
+    # --------------------------------------------------
+    def pivot(self, r, c, iteration, phase):
+
+        print(f"🔹 Phase {phase} — Iteration {iteration}")
+        print(f"Entering Variable: {self.columns[c]}")
+
+        pv = self.table[r][c]
+
+        self.table[r] = [x/pv for x in self.table[r]]
+
+        for i in range(len(self.table)):
+            if i == r:
+                continue
+            factor = self.table[i][c]
+            self.table[i] = [
+                self.table[i][j] - factor*self.table[r][j]
+                for j in range(len(self.table[0]))
+            ]
+
+        self.print_tableau("After Pivot")
+
+    # --------------------------------------------------
+    # Phase-I Solve
+    # --------------------------------------------------
+    def solve_phase1(self):
+
+        print("========== PHASE I ==========")
+        self.print_tableau("Initial Phase-I Tableau")
+
+        k = 1
+        while True:
+            pivot = self.find_pivot(True)
+            if pivot is None:
+                break
+            self.pivot(*pivot, k, 1)
+            k += 1
+
+        if abs(self.table[-1][-1]) > 1e-6:
+            raise Exception("❌ Problem is INFEASIBLE")
+
+        print("✅ Feasible Solution Found")
+
+    # --------------------------------------------------
+    # Remove Artificial Variables
+    # --------------------------------------------------
+    def remove_artificial(self):
+
+        print("Removing Artificial Variables...")
+
+        for a in self.standard["variables"]["artificial"]:
+            idx = self.columns.index(a)
+            for row in self.table:
+                del row[idx]
+            self.columns.remove(a)
+
+        self.table.pop()
+        self.print_tableau("Start of Phase-II")
+
+    # --------------------------------------------------
+    # Phase-II Solve
+    # --------------------------------------------------
+    def solve_phase2(self):
+
+        print("========== PHASE II ==========")
+
+        k = 1
+        while True:
+            pivot = self.find_pivot(False)
+            if pivot is None:
+                break
+            self.pivot(*pivot, k, 2)
+            k += 1
+
+        print("✅ Optimal Solution Reached")
+
+    # --------------------------------------------------
+    # Extract Final Solution
+    # --------------------------------------------------
+    def get_solution(self):
+
+        sol = {}
+        n = len(self.standard["variables"]["decision"])
+
+        for j in range(n):
+            col = [self.table[i][j] for i in range(len(self.table)-1)]
+
+            if col.count(1)==1 and col.count(0)==len(col)-1:
+                sol[self.columns[j]] = self.table[col.index(1)][-1]
+            else:
+                sol[self.columns[j]] = 0
+
+        value = self.table[-1][-1]
+
+        if self.problem["type"] == "max":
+            value *= -1
+
+        sol["objective_value"] = value
+        return sol
+
+    # --------------------------------------------------
+    # MASTER SOLVER
+    # --------------------------------------------------
+    def solve(self):
+
+        self.convert_to_standard_form()
+        self.build_phase1_objective()
+        self.build_phase1_table()
+
+        self.solve_phase1()
+        self.remove_artificial()
+        self.solve_phase2()
+
+        return self.get_solution()
+
+
+# ======================================================
+# USER INPUT FUNCTION
+# ======================================================
+
+def get_problem_from_user():
+
+    print("===== Enter Linear Programming Problem =====")
+
+    n = int(input("Number of variables: "))
+    m = int(input("Number of constraints: "))
+    ptype = input("Problem type (min/max): ").strip().lower()
+
+    print("Enter Objective Function Coefficients:")
+    obj = {}
+    for i in range(n):
+        obj[f"x{i+1}"] = float(input(f"Coefficient of x{i+1}: "))
+
+    constraints = []
+
+    for j in range(m):
+        print(f"Constraint {j+1}")
+        lhs = {}
+        for i in range(n):
+            lhs[f"x{i+1}"] = float(input(f"Coefficient of x{i+1}: "))
+
+        relation = input("Relation (<=, >=, =): ").strip()
+        rhs = float(input("RHS value: "))
+
+        constraints.append({"lhs": lhs, "relation": relation, "rhs": rhs})
+
+    return {"type": ptype, "objective": {"coefficients": obj}, "constraints": constraints}
+ 
