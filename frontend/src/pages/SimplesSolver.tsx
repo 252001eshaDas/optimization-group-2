@@ -1,40 +1,40 @@
 import React, { useState, useEffect } from "react";
 import LPStructurePreview from "./LpStructurePreview";
 
-type MethodType = "two-phase" | "dual";
 type Relation = "<=" | ">=" | "=";
 
-interface SimplexResult {
-  status: string;
-  optimalValue?: number;
-  iterations?: number;
-  variables?: Record<string, number>;
-  method?: string;
+interface BackendResult {
+  solution?: Record<string, number>;
+  logs?: any[];
+  columns?: string[];
 }
 
 const SimplexSolver: React.FC = () => {
-  const [method, setMethod] = useState<MethodType>("two-phase");
-  const [numVars, setNumVars] = useState<number>(2);
-  const [numConstraints, setNumConstraints] = useState<number>(2);
-  const [objective, setObjective] = useState<number[]>([0, 0]);
+  const [numVars] = useState<number>(2);
+  const [numConstraints] = useState<number>(2);
+
+  // ✅ Prefilled example
+  const [objective, setObjective] = useState<number[]>([2, 3]);
   const [constraints, setConstraints] = useState<number[][]>([
     [0, 0, 0],
     [0, 0, 0],
   ]);
   const [relations, setRelations] = useState<Relation[]>(["<=", "<="]);
-  const [result, setResult] = useState<SimplexResult | null>(null);
+  const [visibleTables, setVisibleTables] = useState<number[]>([]);
+  const tableRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  
+  const [result, setResult] = useState<BackendResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [animateIn, setAnimateIn] = useState<boolean>(false);
 
-  // Animation 
   useEffect(() => {
     setAnimateIn(true);
   }, []);
 
-
+  // ✅ Fix leading zero issue
   const handleObjectiveChange = (index: number, value: string) => {
     const updated = [...objective];
-    updated[index] = Number(value);
+    updated[index] = value === "" ? 0 : parseFloat(value);
     setObjective(updated);
   };
 
@@ -44,7 +44,7 @@ const SimplexSolver: React.FC = () => {
     value: string
   ) => {
     const updated = [...constraints];
-    updated[row][col] = Number(value);
+    updated[row][col] = value === "" ? 0 : parseFloat(value);
     setConstraints(updated);
   };
 
@@ -53,63 +53,76 @@ const SimplexSolver: React.FC = () => {
     updated[index] = value;
     setRelations(updated);
   };
-
-
-  const generateStructure = () => {
-    setObjective(Array(numVars).fill(0));
-    setConstraints(
-      Array(numConstraints)
-        .fill(0)
-        .map(() => Array(numVars + 1).fill(0))
-    );
-    setRelations(Array(numConstraints).fill("<="));
-    setResult(null);
-  };
-
+  const [method, setMethod] = useState<"two-phase" | "dual" | null>(null);
 
   const handleSolve = async () => {
-  setLoading(true);
-  setResult(null);
+    setLoading(true);
+    setResult(null);
 
-  // Prepare the payload for two-phase method
-  const payload = {
-    method: method === "two-phase" ? "two-phase" : "dual",
-    objective: objective,        // Coefficients of objective function
-    constraints: constraints.map(row => row.slice(0, numVars)),  // Coefficient matrix A
-    rhs: constraints.map(row => row[numVars]),  // Right-hand side values b
-    relations: relations  // Inequality/equality relations
-  };
-
-  try {
-    const response = await fetch("http://127.0.0.1:8000/api/solve/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-    
-    // Transform the response to match your interface if needed
-    const transformedResult: SimplexResult = {
-      status: data.status || "Unknown",
-      optimalValue: data.optimal_value,
-      iterations: data.iterations,
-      variables: data.variables,
-      method: data.method
+    // Build backend structure exactly
+    const problemDict = {
+      type: "min",
+      objective: {
+        coefficients: {} as Record<string, number>,
+      },
+      constraints: [] as any[],
     };
-    
-    setResult(transformedResult);
-  } catch (error) {
-    console.error("Error:", error);
-    setResult({ 
-      status: "Error connecting to server",
-      // message: error instanceof Error ? error.message : "Unknown error"
+
+    objective.forEach((val, index) => {
+      problemDict.objective.coefficients[`x${index + 1}`] = val;
     });
-  }
 
-  setLoading(false);
-};
+    for (let i = 0; i < numConstraints; i++) {
+      const lhs: Record<string, number> = {};
 
+      for (let j = 0; j < numVars; j++) {
+        lhs[`x${j + 1}`] = constraints[i][j];
+      }
+
+      problemDict.constraints.push({
+        lhs: lhs,
+        rhs: constraints[i][numVars],
+        relation: relations[i],
+      });
+    }
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/solve/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(problemDict),
+      });
+
+      const data = await response.json();
+      setResult(data);
+      setVisibleTables([]);
+
+      if (data.tables) {
+        data.tables.forEach((_: any, index: number) => {
+          setTimeout(() => {
+            setVisibleTables((prev) => [...prev, index]);
+      
+            setTimeout(() => {
+              tableRefs.current[index]?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+            }, 100);
+          }, index * 800); // delay between tables
+        });
+      }
+      
+    } catch (error) {
+      
+      setResult({
+        solution: { error: 0 },
+      });
+    }
+
+    setLoading(false);
+  };
 
   return (
     <div className={`simplex-container ${animateIn ? 'fade-in' : ''}`}>
@@ -122,9 +135,8 @@ const SimplexSolver: React.FC = () => {
           Two-Phase and Dual Simplex algorithms for linear programming.
         </p>
       </div>
-
-      {/* Method Selection */}
-      <div className="method-section card">
+ {/* Method Selection */}
+ <div className="method-section card">
         <h3 className="section-title">Solution Method</h3>
         <div className="method-buttons">
           <label className={`method-label ${method === "two-phase" ? 'active' : ''}`}>
@@ -157,57 +169,20 @@ const SimplexSolver: React.FC = () => {
         </div>
       </div>
 
-      {/* Dimensions Section */}
-      <div className="dimensions-section card">
-        <h3 className="section-title">Problem Dimensions</h3>
-        <div className="dimensions-grid">
-          <div className="dimension-item">
-            <label className="dimension-label">Number of Variables</label>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={numVars}
-              onChange={(e) => setNumVars(Number(e.target.value))}
-              className="dimension-input"
-            />
-          </div>
-
-          <div className="dimension-item">
-            <label className="dimension-label">Number of Constraints</label>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={numConstraints}
-              onChange={(e) => setNumConstraints(Number(e.target.value))}
-              className="dimension-input"
-            />
-          </div>
-
-          <button onClick={generateStructure} className="generate-btn pulse">
-            <span className="btn-icon">✨</span>
-            Generate Structure
-          </button>
-        </div>
-      </div>
-
-      {/* Objective Function */}
+      {/* Objective */}
       <div className="objective-section card">
-        <h3 className="section-title">
-          <span className="title-icon">🎯</span>
-          Objective Function (Maximize)
-        </h3>
+        <h3 className="section-title">Objective Function</h3>
         <div className="coefficients-grid">
           {objective.map((val, i) => (
             <div key={i} className="coefficient-item">
-              <label className="coeff-label">x<sub>{i + 1}</sub></label>
+              <label>x{i + 1}</label>
               <input
-                type="number"
+                type="text"
                 value={val}
-                onChange={(e) => handleObjectiveChange(i, e.target.value)}
+                onChange={(e) =>
+                  handleObjectiveChange(i, e.target.value)
+                }
                 className="coeff-input"
-                step="0.1"
               />
             </div>
           ))}
@@ -216,135 +191,151 @@ const SimplexSolver: React.FC = () => {
 
       {/* Constraints */}
       <div className="constraints-section card">
-        <h3 className="section-title">
-          <span className="title-icon">🔗</span>
-          Constraints
-        </h3>
+        <h3 className="section-title">Constraints</h3>
+
         {constraints.map((row, i) => (
-          <div key={i} className="constraint-row slide-in">
-            <div className="constraint-left">
-              {row.slice(0, numVars).map((val, j) => (
-                <div key={j} className="constraint-term">
-                  <input
-                    type="number"
-                    value={val}
-                    onChange={(e) =>
-                      handleConstraintChange(i, j, e.target.value)
-                    }
-                    className="constraint-input"
-                    step="0.1"
-                  />
-                  <span className="variable-label">x<sub>{j + 1}</sub></span>
-                  {j < numVars - 1 && <span className="plus-sign">+</span>}
-                </div>
-              ))}
-            </div>
+          <div key={i} className="constraint-row">
+            {row.slice(0, numVars).map((val, j) => (
+              <span key={j}>
+                <input
+                  type="text"
+                  value={val}
+                  onChange={(e) =>
+                    handleConstraintChange(i, j, e.target.value)
+                  }
+                  className="constraint-input"
+                />
+                x{j + 1}
+              </span>
+            ))}
 
-            <div className="constraint-right">
-              <select
-                value={relations[i]}
-                onChange={(e) =>
-                  handleRelationChange(i, e.target.value as Relation)
-                }
-                className="relation-select"
-              >
-                <option value="<=">≤</option>
-                <option value=">=">≥</option>
-                <option value="=">=</option>
-              </select>
+            <select
+              value={relations[i]}
+              onChange={(e) =>
+                handleRelationChange(i, e.target.value as Relation)
+              }
+            >
+              <option value="<=">≤</option>
+              <option value=">=">≥</option>
+              <option value="=">=</option>
+            </select>
 
-              <input
-                type="number"
-                value={row[numVars]}
-                onChange={(e) =>
-                  handleConstraintChange(i, numVars, e.target.value)
-                }
-                className="rhs-input"
-                step="0.1"
-              />
-            </div>
+            <input
+              type="text"
+              value={row[numVars]}
+              onChange={(e) =>
+                handleConstraintChange(i, numVars, e.target.value)
+              }
+              className="rhs-input"
+            />
           </div>
         ))}
       </div>
 
-      {/* Solve Button */}
       <div className="action-section">
-        <button 
-          onClick={handleSolve} 
-          className={`solve-btn ${loading ? 'loading' : 'pulse'}`}
+        <button
+          onClick={handleSolve}
+          className="solve-btn"
           disabled={loading}
         >
-          {loading ? (
-            <>
-              <span className="spinner"></span>
-              Solving...
-            </>
-          ) : (
-            <>
-              <span className="btn-icon">🚀</span>
-              Solve Problem
-            </>
-          )}
+          {loading ? "Solving..." : "Solve Problem"}
         </button>
       </div>
 
-      {/* Result Section */}
+      {/* RESULT SECTION */}
       {result && (
-        <div className="result-section card slide-in">
-          <h3 className="result-title">
-            <span className="title-icon">📊</span>
-            Solution Result
-          </h3>
+        <div className="mt-6">
+
+          {/* SOLUTION */}
+          <h2 className="text-xl font-bold mb-2">Final Solution</h2>
+          <pre className="bg-gray-100 p-4 rounded">
+            {JSON.stringify(result.solution, null, 2)}
+          </pre>
           
-          <div className="result-content">
-            <div className={`result-status ${result.status.includes('Optimal') ? 'success' : 'info'}`}>
-              {result.status}
-            </div>
 
-            <div className="result-grid">
-              {result.optimalValue !== undefined && (
-                <div className="result-item">
-                  <span className="result-label">Optimal Value</span>
-                  <span className="result-value highlight">
-                    {result.optimalValue.toFixed(2)}
-                  </span>
-                </div>
-              )}
+          {/* TABLES */}
+          <h2 className="text-xl font-bold mt-6 mb-2">Tableaus</h2>
+{/* TABLEAU SECTION - Centered with scroll animation */}
+{result?.tables && result.tables.length > 0 && (
+  <div className="mt-12 space-y-16">
+    {result.tables.map((table: any, index: number) => {
+      const isVisible = visibleTables?.includes(index) ?? true;
+      
+      return (
+        <div
+          key={index}
+          ref={(el) => tableRefs.current && (tableRefs.current[index] = el)}
+          className={`flex flex-col items-center transition-all duration-1000 ${
+            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'
+          }`}
+        >
+          {/* Table heading - centered */}
+          <h3 className="text-lg font-semibold text-black mb-4 text-center">
+            Tableau {index + 1}
+            {index === 0 && " (Initial)"}
+            {index === result.tables.length - 1 && " (Final)"}
+          </h3>
 
-              {result.iterations !== undefined && (
-                <div className="result-item">
-                  <span className="result-label">Iterations</span>
-                  <span className="result-value">{result.iterations}</span>
-                </div>
-              )}
-
-              {result.method && (
-                <div className="result-item">
-                  <span className="result-label">Method Used</span>
-                  <span className="result-value">{result.method}</span>
-                </div>
-              )}
-            </div>
-
-            {result.variables && (
-              <div className="variables-section">
-                <h4 className="variables-title">Decision Variables</h4>
-                <div className="variables-grid">
-                  {Object.entries(result.variables).map(([k, v]) => (
-                    <div key={k} className="variable-card">
-                      <span className="variable-name">{k}</span>
-                      <span className="variable-value">= {(v as number).toFixed(2)}</span>
-                    </div>
+          {/* Centered table */}
+          <div className="flex justify-center w-full overflow-x-auto">
+            <table style={{ 
+              borderCollapse: 'collapse', 
+              backgroundColor: 'white',
+              border: '1px solid black',
+              margin: '0 auto'
+            }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                  {table.columns.map((col: string, i: number) => (
+                    <th 
+                      key={i} 
+                      style={{ 
+                        border: '1px solid black',
+                        padding: '12px 24px',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        color: 'black',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {col}
+                    </th>
                   ))}
-                </div>
-              </div>
-            )}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((row: number[], rIndex: number) => (
+                  <tr key={rIndex}>
+                    {row.map((cell: number, cIndex: number) => (
+                      <td 
+                        key={cIndex} 
+                        style={{ 
+                          border: '1px solid black',
+                          padding: '12px 24px',
+                          fontSize: '14px',
+                          color: 'black',
+                          fontFamily: 'monospace',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {cell.toFixed(4)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <LPStructurePreview
-  objective={objective}
-  constraints={constraints.map(r => r.slice(0, numVars))}
-  rhs={constraints.map(r => r[numVars])}
-/>
+
+          {/* Separator between tables */}
+          {index < result.tables.length - 1 && (
+            <div className="mt-8 text-black text-center font-bold animate-bounce">▼</div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
 
         </div>
       )}
