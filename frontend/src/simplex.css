@@ -1,0 +1,306 @@
+    .simplex-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+    
+    .simplex-container.fade-in {
+      opacity: 1;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border: 1px solid #e0e0e0;
+    }
+    
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #333;
+      margin: 0;
+    }
+    
+    .variable-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .var-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background: white;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .var-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .var-count {
+      font-size: 0.9rem;
+      color: #666;
+    }
+    
+    .example-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .example-btn {
+      padding: 0.5rem 1rem;
+      border: 1px solid #ccc;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    
+    .example-btn:hover {
+      background: #f5f5f5;
+    }
+    
+    .method-buttons {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    
+    .method-label {
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+      flex: 1;
+      min-width: 200px;
+    }
+    
+    .method-label.active {
+      border-color: #000;
+      background: #f9f9f9;
+    }
+    
+    .method-radio {
+      margin-bottom: 0.5rem;
+    }
+    
+    .method-text {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    
+    .method-icon {
+      margin-right: 0.5rem;
+    }
+    
+    .method-description {
+      font-size: 0.85rem;
+      color: #666;
+    }
+    
+    .coefficients-grid {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    
+    .coefficient-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .coefficient-item label {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 0.25rem;
+    }
+    
+    .coeff-input {
+      width: 80px;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .constraint-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .constraint-term {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    
+    .constraint-input {
+      width: 60px;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .variable-label {
+      font-size: 0.9rem;
+    }
+    
+    .plus-sign {
+      margin: 0 0.25rem;
+      color: #666;
+    }
+    
+    .relation-select {
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+      margin: 0 0.5rem;
+    }
+    
+    .rhs-input {
+      width: 60px;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .action-section {
+      display: flex;
+      justify-content: center;
+      margin: 2rem 0;
+    }
+    
+    .solve-btn {
+      padding: 1rem 3rem;
+      background: #000;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .solve-btn:hover:not(:disabled) {
+      background: #333;
+    }
+    
+    .solve-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .results-section {
+      margin-top: 3rem;
+    }
+    
+    .solution-card {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .solution-display {
+      background: #f9f9f9;
+      padding: 1rem;
+      border-radius: 4px;
+      font-family: monospace;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .tableau-section {
+      margin-top: 2rem;
+    }
+    
+    .tableau-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 4rem;
+    }
+    
+    .tableau-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    
+    .table-wrapper {
+      overflow-x: auto;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    
+    .simplex-table {
+      border-collapse: collapse;
+      background: white;
+      border: 2px solid #333;
+      margin: 0 auto;
+    }
+    
+    .simplex-table th,
+    .simplex-table td {
+      border: 1px solid #333;
+      padding: 12px 24px;
+      font-size: 14px;
+      text-align: center;
+    }
+    
+    .simplex-table th {
+      background: #f0f0f0;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .simplex-table td {
+      color: #333;
+      font-family: monospace;
+    }
+    
+    .separator {
+      margin-top: 2rem;
+      font-size: 1.5rem;
+      color: #333;
+      animation: bounce 2s infinite;
+    }
+    
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(10px); }
+    }
+  

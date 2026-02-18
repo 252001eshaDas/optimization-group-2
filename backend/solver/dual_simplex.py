@@ -13,9 +13,7 @@ import copy
 class DualSimplex:
 
     # --------------------------------------------------
-    def __init__(self, show_steps=True):
-
-        problem = self._get_user_problem()
+    def __init__(self, problem, show_steps=True):
 
         self.original_problem = copy.deepcopy(problem)
         self.problem = None
@@ -28,48 +26,13 @@ class DualSimplex:
         self.show_steps = show_steps
         self.iteration = 0
 
+        self.logs = []
+
+
     # --------------------------------------------------
     # TAKE USER INPUT
     # --------------------------------------------------
-    def _get_user_problem(self):
-
-        print("\nEnter Linear Programming Problem")
-
-        ptype = input("Enter problem type (max/min): ").lower()
-
-        n = int(input("Enter number of variables: "))
-        m = int(input("Enter number of constraints: "))
-
-        variables = [f"x{i+1}" for i in range(n)]
-
-        print("\nEnter objective coefficients:")
-        obj = {}
-        for v in variables:
-            obj[v] = float(input(f"Coefficient of {v}: "))
-
-        constraints = []
-
-        for i in range(m):
-            print(f"\nConstraint {i+1}")
-
-            lhs = {}
-            for v in variables:
-                lhs[v] = float(input(f"Coefficient of {v}: "))
-
-            relation = input("Relation (<=, >=, =): ")
-            rhs = float(input("RHS value: "))
-
-            constraints.append({
-                "lhs": lhs,
-                "rhs": rhs,
-                "relation": relation
-            })
-
-        return {
-            "type": ptype,
-            "objective": {"coefficients": obj},
-            "constraints": constraints
-        }
+    
 
     # --------------------------------------------------
     # Normalize MAX → MIN and convert to <=
@@ -147,18 +110,19 @@ class DualSimplex:
     # --------------------------------------------------
     # Print Tableau (Tabular)
     # --------------------------------------------------
-    def _print_tableau(self):
+    def _log_tableau(self):
 
-        print(f"\n🔹 Iteration {self.iteration}")
-
-        headers = self.columns + ["RHS"]
-        width = 12
-
-        print("".join(h.center(width) for h in headers))
-        print("-" * width * len(headers))
+        snapshot = {
+            "title": f"Iteration {self.iteration}",
+            "columns": self.columns + ["RHS"],
+            "rows": []
+        }
 
         for row in self.tableau:
-            print("".join(f"{round(val,4):.4f}".center(width) for val in row))
+            snapshot["rows"].append(row.copy())
+
+        self.logs.append(snapshot)
+
 
     # --------------------------------------------------
     # Find Pivot
@@ -209,19 +173,18 @@ class DualSimplex:
     def _iterate(self):
 
         while True:
-            self._print_tableau()
+
+            self._log_tableau()
 
             pivot_pos = self._find_pivot()
 
             if pivot_pos is None:
-                print("\n✅ Optimality Reached")
                 break
 
             pr, pc = pivot_pos
-            print(f"\n➡ Pivot at Row {pr+1}, Column {self.columns[pc]}")
-
             self._pivot(pr, pc)
             self.iteration += 1
+
 
     # --------------------------------------------------
     # Extract Solution
@@ -253,10 +216,18 @@ class DualSimplex:
         self._build_initial_tableau()
         self._iterate()
 
-        return self._extract_solution()
+        final_solution = self._extract_solution()
+        print(final_solution)
 
-solver = DualSimplex()
-result = solver.solve()
 
-print("\n🎯 FINAL SOLUTION:")
-print(result)
+        return {
+            "solution": final_solution,
+            "tables": self.logs,
+            "columns": self.columns
+        }
+
+
+# solver = DualSimplex()
+# result = solver.solve()
+
+# print("\n🎯 FINAL SOLUTION:")
