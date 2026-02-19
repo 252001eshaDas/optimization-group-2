@@ -218,8 +218,6 @@ class TwoPhase:
         if abs(self.table[-1][-1]) > 1e-6:
             raise Exception("❌ Problem is INFEASIBLE")
             
-            esha
-
         print("✅ Feasible Solution Found")
 
     # --------------------------------------------------
@@ -303,7 +301,6 @@ class TwoPhase:
 
         return {
             "solution": final_solution,
-            "exception"
             "tables": self.iteration_log,
             "columns": self.columns
         }
