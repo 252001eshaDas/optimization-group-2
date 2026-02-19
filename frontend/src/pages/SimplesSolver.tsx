@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import '../simplex.css'
 type Relation = "<=" | ">=" | "=";
 
@@ -10,12 +10,12 @@ interface BackendResult {
 }
 
 const SimplexSolver: React.FC = () => {
-  const [numVars, setNumVars] = useState<number>(3);
-  const [numConstraints, setNumConstraints] = useState<number>(3);
+ const [numVars, setNumVars] = useState(3);
+  const [numConstraints, setNumConstraints] = useState(3);
+
   const [method, setMethod] = useState<"two-phase" | "dual">("two-phase");
   const [type, setType] = useState<"max" | "min">("min");
 
-  // Predefined example values
   const [objective, setObjective] = useState<number[]>([3, 5, 4]);
   const [constraints, setConstraints] = useState<number[][]>([
     [2, 3, 0, 8],
@@ -25,72 +25,97 @@ const SimplexSolver: React.FC = () => {
   const [relations, setRelations] = useState<Relation[]>([">=", ">=", ">="]);
 
   const [visibleTables, setVisibleTables] = useState<number[]>([]);
-  const tableRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const tableRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const [result, setResult] = useState<BackendResult | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [animateIn, setAnimateIn] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [animateIn, setAnimateIn] = useState(false);
 
+  useEffect(() => setAnimateIn(true), []);
+
+
+  // Objective length sync
   useEffect(() => {
-    setAnimateIn(true);
-  }, []);
+    setObjective(prev =>
+      prev.slice(0, numVars).concat(Array(Math.max(0, numVars - prev.length)).fill(0))
+    );
+  }, [numVars]);
 
-  // Add variable
-  const addVariable = () => {
-    setNumVars(prev => prev + 1);
-    setObjective(prev => [...prev, 0]);
-    setConstraints(prev => prev.map(row => [...row.slice(0, -1), 0, row[row.length - 1]]));
-  };
+  // Constraints shape + count sync
+  useEffect(() => {
+    setConstraints(prev => {
+      const rows = prev.slice(0, numConstraints).map(row => {
+        const coeffs = row.slice(0, numVars);
+        const rhs = row[row.length - 1] ?? 0;
+        return [...coeffs, ...Array(numVars - coeffs.length).fill(0), rhs];
+      });
 
-  // Remove variable
+      while (rows.length < numConstraints) {
+        rows.push([...Array(numVars).fill(0), 0]);
+      }
+
+      return rows;
+    });
+  }, [numVars, numConstraints]);
+
+  // Relations sync
+  useEffect(() => {
+    setRelations(prev =>
+      prev
+        .slice(0, numConstraints)
+        .concat(Array(Math.max(0, numConstraints - prev.length)).fill(">="))
+    );
+  }, [numConstraints]);
+
+  /* ---------------- ACTIONS ---------------- */
+
+  const addVariable = () => setNumVars(v => v + 1);
+
   const removeVariable = () => {
-    if (numVars > 1) {
-      setNumVars(prev => prev - 1);
-      setObjective(prev => prev.slice(0, -1));
-      setConstraints(prev => prev.map(row => [...row.slice(0, -2), row[row.length - 1]]));
-    }
+    if (numVars > 1) setNumVars(v => v - 1);
   };
 
-  // Add constraint
-  const addConstraint = () => {
-    setNumConstraints(prev => prev + 1);
-    setConstraints(prev => [...prev, Array(numVars + 1).fill(0)]);
-    setRelations(prev => [...prev, ">="]);
-  };
+  const addConstraint = () => setNumConstraints(c => c + 1);
 
-  // Remove constraint
   const removeConstraint = () => {
-    if (numConstraints > 1) {
-      setNumConstraints(prev => prev - 1);
-      setConstraints(prev => prev.slice(0, -1));
-      setRelations(prev => prev.slice(0, -1));
-    }
+    if (numConstraints > 1) setNumConstraints(c => c - 1);
   };
 
-  const handleObjectiveChange = (index: number, value: string) => {
-    const updated = [...objective];
-    updated[index] = value === "" ? 0 : parseFloat(value);
-    setObjective(updated);
+  /* ---------------- INPUT HANDLERS ---------------- */
+
+  const safeNumber = (value: string) => {
+    const n = Number(value);
+    return isNaN(n) ? 0 : n;
   };
 
-  const handleConstraintChange = (
-    row: number,
-    col: number,
-    value: string
-  ) => {
-    const updated = [...constraints];
-    updated[row][col] = value === "" ? 0 : parseFloat(value);
-    setConstraints(updated);
+  const handleObjectiveChange = (i: number, value: string) => {
+    setObjective(prev => {
+      const next = [...prev];
+      next[i] = safeNumber(value);
+      return next;
+    });
   };
 
-  const handleRelationChange = (index: number, value: Relation) => {
-    const updated = [...relations];
-    updated[index] = value;
-    setRelations(updated);
+  const handleConstraintChange = (r: number, c: number, value: string) => {
+    setConstraints(prev => {
+      const next = prev.map(row => [...row]);
+      next[r][c] = safeNumber(value);
+      return next;
+    });
   };
 
-  // Predefined examples
+  const handleRelationChange = (i: number, value: Relation) => {
+    setRelations(prev => {
+      const next = [...prev];
+      next[i] = value;
+      return next;
+    });
+  };
+
+  /* ---------------- EXAMPLES ---------------- */
+
   const loadExample1 = () => {
+    setType("max");
     setNumVars(2);
     setNumConstraints(2);
     setObjective([2, 3]);
@@ -102,6 +127,7 @@ const SimplexSolver: React.FC = () => {
   };
 
   const loadExample2 = () => {
+    setType("min");
     setNumVars(3);
     setNumConstraints(3);
     setObjective([3, 5, 4]);
@@ -114,6 +140,7 @@ const SimplexSolver: React.FC = () => {
   };
 
   const loadExample3 = () => {
+    setType("min");
     setNumVars(3);
     setNumConstraints(2);
     setObjective([4, 1, 2]);
@@ -125,72 +152,59 @@ const SimplexSolver: React.FC = () => {
   };
 
   const handleSolve = async () => {
-    setLoading(true);
-    setResult(null);
-    setVisibleTables([]);
+  setLoading(true);
+  setResult(null);
+  setVisibleTables([]);
 
-    const problemDict = {
-      method: method,
-      type:type,
-      objective: {
-        coefficients: {} as Record<string, number>,
-      },
-      constraints: [] as any[],
-    };
+  const problemDict = {
+    method,
+    type,
+    objective: {
+      coefficients: objective.reduce<Record<string, number>>((acc, v, i) => {
+        acc[`x${i + 1}`] = v;
+        return acc;
+      }, {}),
+    },
+    constraints: constraints.map((row, i) => ({
+      lhs: row.slice(0, -1).reduce<Record<string, number>>((acc, v, j) => {
+        acc[`x${j + 1}`] = v;
+        return acc;
+      }, {}),
+      rhs: row[row.length - 1],
+      relation: relations[i],
+    })),
+  };
 
-    objective.forEach((val, index) => {
-      problemDict.objective.coefficients[`x${index + 1}`] = val;
+  try {
+    const response = await fetch("http://127.0.0.1:8000/api/solve/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(problemDict),
     });
 
-    for (let i = 0; i < numConstraints; i++) {
-      const lhs: Record<string, number> = {};
+    const data = await response.json();
+    setResult(data);
 
-      for (let j = 0; j < numVars; j++) {
-        lhs[`x${j + 1}`] = constraints[i][j];
-      }
-
-      problemDict.constraints.push({
-        lhs: lhs,
-        rhs: constraints[i][numVars],
-        relation: relations[i],
-      });
-    }
-
-    try {
-      const response = await fetch("http://127.0.0.1:8000/api/solve/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(problemDict),
-      });
-
-      const data = await response.json();
-      setResult(data);
-
-      if (data.tables) {
-        data.tables.forEach((_: any, index: number) => {
+    if (data.tables) {
+      data.tables.forEach((_: any, index: number) => {
+        setTimeout(() => {
+          setVisibleTables(prev => [...prev, index]);
           setTimeout(() => {
-            setVisibleTables((prev) => [...prev, index]);
-
-            setTimeout(() => {
-              tableRefs.current[index]?.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              });
-            }, 100);
-          }, index * 800);
-        });
-      }
-
-    } catch (error) {
-      setResult({
-        solution: { error: 0 },
+            tableRefs.current[index]?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 100);
+        }, index * 800);
       });
     }
+  } catch {
+    setResult({ solution: { error: 0 } });
+  }
 
-    setLoading(false);
-  };
+  setLoading(false);
+};
+
 
   return (
     <div className={`simplex-container ${animateIn ? 'fade-in' : ''}`}>
